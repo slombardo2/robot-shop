@@ -1,6 +1,5 @@
 import random
-
-import instana
+#import instana
 import os
 import sys
 import time
@@ -9,8 +8,8 @@ import uuid
 import json
 import requests
 import traceback
-import opentracing as ot
-import opentracing.ext.tags as tags
+#import opentracing as ot
+#import opentracing.ext.tags as tags
 from flask import Flask
 from flask import Response
 from flask import request
