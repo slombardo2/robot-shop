@@ -16,6 +16,19 @@ from flask import Response
 from flask import request
 from flask import jsonify
 from rabbitmq import Publisher
+
+#Honeycomb
+import beeline
+from beeline.middleware.flask import HoneyMiddleware
+
+# If you use uSWGI, Gunicorn, Celery, or other pre-fork models, do not initialize the Beeline here.
+# See the section below on pre-fork models.
+beeline.init(writekey='f9e0f7c58be2dde4c878162daed00123', dataset="payment", service_name="payment", debug=True)
+
+# Pass your Flask app to HoneyMiddleware
+app = Flask(__name__)
+HoneyMiddleware(app, db_events=False) # db_events defaults to True, set to False if not using our db middleware with Flask-SQLAlchemy
+
 # Prometheus
 import prometheus_client
 from prometheus_client import Counter, Histogram
