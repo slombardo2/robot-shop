@@ -8,7 +8,7 @@ services:
   payment:
     build:
       context: .
-    image: robotshop/rs-payment
+    image: slombardo2/rs-payment
     depends_on:
       - rabbitmq
     ports:
