@@ -20,21 +20,16 @@ from rabbitmq import Publisher
 #Honeycomb
 import beeline
 from beeline.middleware.flask import HoneyMiddleware
-
-# If you use uSWGI, Gunicorn, Celery, or other pre-fork models, do not initialize the Beeline here.
-# See the section below on pre-fork models.
-beeline.init(writekey='f9e0f7c58be2dde4c878162daed00123', dataset="payment", service_name="payment", debug=True)
+from uwsgidecorators import postfork
 
 # Pass your Flask app to HoneyMiddleware
 app = Flask(__name__)
 HoneyMiddleware(app, db_events=False) # db_events defaults to True, set to False if not using our db middleware with Flask-SQLAlchemy
+app.logger.setLevel(logging.INFO)
 
 # Prometheus
 import prometheus_client
 from prometheus_client import Counter, Histogram
-
-app = Flask(__name__)
-app.logger.setLevel(logging.INFO)
 
 CART = os.getenv('CART_HOST', 'cart')
 USER = os.getenv('USER_HOST', 'user')
@@ -46,6 +41,10 @@ PromMetrics['SOLD_COUNTER'] = Counter('sold_count', 'Running count of items sold
 PromMetrics['AUS'] = Histogram('units_sold', 'Avergae Unit Sale', buckets=(1, 2, 5, 10, 100))
 PromMetrics['AVS'] = Histogram('cart_value', 'Avergae Value Sale', buckets=(100, 200, 500, 1000, 2000, 5000, 10000))
 
+@postfork
+def init_beeline():
+    logging.info(f'beeline initialization in process pid {os.getpid()}')
+    beeline.init(writekey="f9e0f7c58be2dde4c878162daed00123", dataset="honeycomb-uwsgi-example", debug=True)
 
 @app.errorhandler(Exception)
 def exception_handler(err):
