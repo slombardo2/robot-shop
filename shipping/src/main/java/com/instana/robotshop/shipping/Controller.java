@@ -23,8 +23,7 @@ try {
 } catch (URISyntaxException e) {
     e.printStackTrace();
 }
-DefaultBeeline beeline = DefaultBeeline.getInstance("rs-shipping", "robot-shop", "f9e0f7c58be2dde4c878162daed00123", honeycombAPIEndpoint,
-  LibHoney.transportOptions().setProxy(HttpHost.create("https://myproxy.localhost:3000")).build());
+DefaultBeeline beeline = DefaultBeeline.getInstance("rs-shipping", "robot-shop", "f9e0f7c58be2dde4c878162daed00123", honeycombAPIEndpoint, LibHoney.transportOptions().setProxy(HttpHost.create("https://myproxy.localhost:3000")).build());
 
 
 @RestController
