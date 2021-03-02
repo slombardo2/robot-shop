@@ -17,15 +17,6 @@ import org.springframework.web.server.ResponseStatusException;
 import org.springframework.http.HttpStatus;
 import io.honeycomb.beeline.tracing.Beeline;
 
-URI honeycombAPIEndpoint;
-try {
-   honeycombAPIEndpoint = new URI("https://api.honeycomb.io");
-} catch (URISyntaxException e) {
-    e.printStackTrace();
-}
-DefaultBeeline beeline = DefaultBeeline.getInstance("rs-shipping", "robot-shop", "f9e0f7c58be2dde4c878162daed00123", honeycombAPIEndpoint, LibHoney.transportOptions().setProxy(HttpHost.create("https://myproxy.localhost:3000")).build());
-
-
 @RestController
 public class Controller {
     private static final Logger logger = LoggerFactory.getLogger(Controller.class);
