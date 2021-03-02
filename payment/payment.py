@@ -51,44 +51,12 @@ def init_beeline():
 
 @app.errorhandler(Exception)
 def exception_handler(err):
-    g.ev.add_field("errors.message", err.message)
+    beeline.add_context("errors.message", err)
     response = jsonify(err.to_dict())
     response.status_code = err.status_code
     return response
 #    app.logger.error(str(err))
 #    return str(err), 500
-
-@app.before_request
-def before():
-    # g is the thread-local / request-local variable, we will use it to store
-    # information that will be used when we eventually send the event to
-    # Honeycomb, including a timer for the whole request duration.
-    g.req_start = datetime.datetime.now()
-   # g.ev = libhoney_builder.new_event()
-    g.ev = beeline.new_event()
-    g.ev.add_field("request.path", request.path)
-    g.ev.add_field("request.method", request.method)
-    g.ev.add_field("request.user_agent.browser", request.user_agent.browser)
-    g.ev.add_field("request.user_agent.platform", request.user_agent.platform)
-    g.ev.add_field("request.user_agent.language", request.user_agent.language)
-    g.ev.add_field("request.user_agent.string", request.user_agent.string)
-    g.ev.add_field("request.user_agent.version", request.user_agent.version)
-    g.ev.add_field("request.python_function", request.endpoint)
-    g.ev.add_field("request.url_pattern", str(request.url_rule))
-    
-@app.after_request
-def after(response):
-    g.ev.add_field("response.status_code", response.status_code)
-
-    # Note that this isn"t the total time to serve the request, i.e., how long
-    # the end user is waiting. It accounts for the time spent in the Flask
-    # handlers but not Werkzeug, etc. Ingesting edge data from ELB or
-    # nginx etc. is usually much better for that kind of (total request time) info.
-    g.ev.add_field("timers.flask_time_ms", milliseconds_since(g.req_start))
-
-    app.logger.debug(g.ev)
-    g.ev.send()
-    return response
 
 @app.route('/health', methods=['GET'])
 def health():
@@ -215,7 +183,7 @@ def pay(id):
         return 'order history update error', req.status_code
 
     return jsonify({ 'orderid': orderid })
-
+    beeline.finish_trace(trace)
 
 def queueOrder(order):
     app.logger.info('queue order')
