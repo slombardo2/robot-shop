@@ -41,6 +41,12 @@
 			<artifactId>instana-java-sdk</artifactId>
 			<version>1.2.0</version>
 		</dependency>
+		
+		<dependency>
+  			<groupId>io.honeycomb.beeline</groupId>
+ 			<artifactId>beeline-spring-boot-starter</artifactId>
+  			<version>1.5.0</version>
+		</dependency>
 
 		<dependency>
 			<groupId>mysql</groupId>
