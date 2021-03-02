@@ -2,7 +2,7 @@ import random
 #import instana
 import os
 import sys
-import time
+import datetime
 import logging
 import uuid
 import json
@@ -13,7 +13,10 @@ import traceback
 from flask import Flask
 from flask import Response
 from flask import request
+from flask import render_template
+from helpers import *
 from flask import jsonify
+from flask import g
 from rabbitmq import Publisher
 
 #Honeycomb
@@ -24,6 +27,7 @@ from uwsgidecorators import postfork
 # Pass your Flask app to HoneyMiddleware
 app = Flask(__name__)
 HoneyMiddleware(app, db_events=False) # db_events defaults to True, set to False if not using our db middleware with Flask-SQLAlchemy
+app.logger.addHandler(logging.StreamHandler(sys.stderr))
 app.logger.setLevel(logging.INFO)
 
 # Prometheus
@@ -43,19 +47,58 @@ PromMetrics['AVS'] = Histogram('cart_value', 'Avergae Value Sale', buckets=(100,
 @postfork
 def init_beeline():
     logging.info(f'beeline initialization in process pid {os.getpid()}')
-    beeline.init(writekey="f9e0f7c58be2dde4c878162daed00123", dataset="honeycomb-uwsgi-example", debug=True)
+    beeline.init(writekey="f9e0f7c58be2dde4c878162daed00123", dataset="rs-payment", debug=True)
 
 @app.errorhandler(Exception)
 def exception_handler(err):
-    app.logger.error(str(err))
-    return str(err), 500
+    g.ev.add_field("errors.message", err.message)
+    response = jsonify(err.to_dict())
+    response.status_code = err.status_code
+    return response
+#    app.logger.error(str(err))
+#    return str(err), 500
+
+@app.before_request
+def before():
+    # g is the thread-local / request-local variable, we will use it to store
+    # information that will be used when we eventually send the event to
+    # Honeycomb, including a timer for the whole request duration.
+    g.req_start = datetime.datetime.now()
+   # g.ev = libhoney_builder.new_event()
+    g.ev = beeline.new_event()
+    g.ev.add_field("request.path", request.path)
+    g.ev.add_field("request.method", request.method)
+    g.ev.add_field("request.user_agent.browser", request.user_agent.browser)
+    g.ev.add_field("request.user_agent.platform", request.user_agent.platform)
+    g.ev.add_field("request.user_agent.language", request.user_agent.language)
+    g.ev.add_field("request.user_agent.string", request.user_agent.string)
+    g.ev.add_field("request.user_agent.version", request.user_agent.version)
+    g.ev.add_field("request.python_function", request.endpoint)
+    g.ev.add_field("request.url_pattern", str(request.url_rule))
+    
+@app.after_request
+def after(response):
+    g.ev.add_field("response.status_code", response.status_code)
+
+    # Note that this isn"t the total time to serve the request, i.e., how long
+    # the end user is waiting. It accounts for the time spent in the Flask
+    # handlers but not Werkzeug, etc. Ingesting edge data from ELB or
+    # nginx etc. is usually much better for that kind of (total request time) info.
+    g.ev.add_field("timers.flask_time_ms", milliseconds_since(g.req_start))
+
+    app.logger.debug(g.ev)
+    g.ev.send()
+    return response
 
 @app.route('/health', methods=['GET'])
 def health():
-    return 'OK'
+    return jsonify(up=True)
+    #return 'OK'
 
 # Prometheus
-@app.route('/metrics', methods=['GET'])
+@app.route('/metrics', defaults={"metric_id": None}, methods=['GET'])
+#@app.route('/metrics', methods=['GET'])
+@app.route('/metrics/<int:metric_id>/', methods=['GET']
 def metrics():
     res = []
     for m in PromMetrics.values():
@@ -66,16 +109,25 @@ def metrics():
 
 @app.route('/pay/<id>', methods=['POST'])
 def pay(id):
+    trace = beeline.start_trace(context={
+        "name": "rs-payment",
+        "hostname": hostname,
+        "user_id": id
+        # other initial context
+    })
     app.logger.info('payment for {}'.format(id))
     cart = request.get_json()
     app.logger.info(cart)
-
     anonymous_user = True
+    beeline.add_context({
+        'id': id,
+        'cart': cart
+    )}
 
     # add some log info to the active trace
-    span = ot.tracer.active_span
-    span.log_kv({'id': id})
-    span.log_kv({'cart': cart})
+    #span = beeline.start_span(context={
+    #span.log_kv({'id': id})
+    #span.log_kv({'cart': cart})
 
     # check user exists
     try:
@@ -85,6 +137,11 @@ def pay(id):
         return str(err), 500
     if req.status_code == 200:
         anonymous_user = False
+    beeline.add_context({
+        'Request': req,
+        'Error': err,
+        'User': user
+    )}
 
     # check that the cart is valid
     # this will blow up if the cart is not valid
@@ -106,6 +163,11 @@ def pay(id):
         return str(err), 500
     if req.status_code != 200:
         return 'payment error', req.status_code
+    beeline.add_context({
+        'Request': req,
+        'Error': err,
+        'User': user
+    )}
 
     # Prometheus
     # items purchased
@@ -117,6 +179,12 @@ def pay(id):
     # Generate order id
     orderid = str(uuid.uuid4())
     queueOrder({ 'orderid': orderid, 'user': id, 'cart': cart })
+    beeline.add_context({
+        'QueueOrder': queueOrder,
+        'Order#': orderid,
+        'Cart': cart,
+        'User': id
+    )}
 
     # add to order history
     if not anonymous_user:
@@ -128,6 +196,13 @@ def pay(id):
         except requests.exceptions.RequestException as err:
             app.logger.error(err)
             return str(err), 500
+        beeline.add_context({
+        'Request': req,
+        'Order#': orderid,
+        'Cart': cart,
+        'User': user
+        'Error': err,
+    )}
 
     # delete cart
     try:
