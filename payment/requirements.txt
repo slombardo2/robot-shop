@@ -5,4 +5,5 @@ pika
 prometheus_client
 opentracing
 instana
+python-dateutil
 honeycomb-beeline
